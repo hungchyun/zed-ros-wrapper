@@ -601,7 +601,7 @@ private:
     int mCamWB          = 4200;
 
     int mCamDepthConfidence = 50;
-    int mCamDepthTextureConf = 100;
+    int mCamDepthTextureConf = 80;
     double mPointCloudFreq = 15.;
     double mVideoDepthFreq = 15.;
 
