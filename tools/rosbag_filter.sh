@@ -16,4 +16,6 @@ rosbag filter $input $output "topic == '/zed/zed_node/imu/data' or \
                               topic == '/zed/zed_node/depth/depth_registered' or \
                               topic == '/zed/zed_node/left/camera_info' or \
                               topic == '/zed/zed_node/depth/camera_info' or \
-                              topic == '/zed/zed_node/point_cloud/cloud_registered'"
+                              topic == '/zed/zed_node/point_cloud/cloud_registered' or \
+                              topic == '/tf' or \
+                              topic == '/tf_static'"
