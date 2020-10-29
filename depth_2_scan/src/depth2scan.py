@@ -2,8 +2,10 @@
 
 import math
 import numpy as np
+import random
 
 import image_geometry
+import rosbag
 import rospy
 import sensor_msgs.point_cloud2
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
@@ -11,7 +13,7 @@ from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 camera_info_ = None
 camera_model_ = image_geometry.PinholeCameraModel()
 
-pub_ = rospy.Publisher('/zed/zed_node/point_cloud/cloud_registered_modified', PointCloud2, queue_size=10)
+pub_ = rospy.Publisher('/zed2/zed_node/point_cloud/cloud_registered_modified', PointCloud2, queue_size=10)
 
 logPointcloud = False
 
@@ -95,25 +97,36 @@ def depth_image_callback(msg):
 
 def point_cloud_callback(msg):
 
-    limit_size = 300
-    cloud_arr_filterd = np.zeros(shape=(1, 4), dtype=np.float32)
+    # Initialize array.
+    limit_size = 384
+    cloud_arr_filterd = np.zeros(shape=(limit_size, 4), dtype=np.float32)
 
-    dtype_list = fields_to_dtype(msg.fields, msg.point_step)
+    # Convert point cloud to array.
+    # dtype_list = fields_to_dtype(msg.fields, msg.point_step)
+    # cloud_arr = np.frombuffer(msg.data, dtype_list)
+    # cloud_arr = cloud_arr[
+    #     [fname for fname, _type in dtype_list if not (fname[:len(DUMMY_FIELD_PREFIX)] == DUMMY_FIELD_PREFIX)]]
 
-    # parse the cloud into an array
-    cloud_arr = np.frombuffer(msg.data, dtype_list)
+    # Compute the select rate.
+    pts = np.array(list(sensor_msgs.point_cloud2.read_points(msg, skip_nans=True)), dtype=np.float32)
+    num_pcl = pts.shape[0]
+    # rate_sel = float(limit_size) / float(num_pcl)
 
-    # remove the dummy fields that were added
-    cloud_arr = cloud_arr[
-        [fname for fname, _type in dtype_list if not (fname[:len(DUMMY_FIELD_PREFIX)] == DUMMY_FIELD_PREFIX)]]
+    # Select point randomly.
+    # count_sel = 0
+    # while count_sel < limit_size:
+    #     ind = random.randint(0, num_pcl - 1)
+    #     if random.random() < rate_sel:
+    #         cloud_arr_filterd[count_sel] = np.array((pts[ind][0], pts[ind][1], pts[ind][2], pts[ind][3]), dtype=np.float32)
+    #         count_sel = count_sel + 1
+    ind = random.sample(range(num_pcl), k=limit_size)
+    cloud_arr_filterd = pts[ind]
 
-    # rgb = np.array((255 << 16) | (0 << 8) | (0 << 0), dtype=np.uint32)
+    # for ind in range(len(cloud_arr)):
+    #     if math.isnan(cloud_arr[ind][0]) is False and len(cloud_arr_filterd) <= limit_size:
+    #         cloud_arr_filterd = np.vstack((cloud_arr_filterd, np.array((cloud_arr[ind][0], cloud_arr[ind][1], cloud_arr[ind][2], cloud_arr[ind][3]), dtype=np.float32)))
 
-        # if math.isnan(cloud_arr[ind][0]) is False and len(cloud_arr_filterd) < limit_size:
-    for ind in range(len(cloud_arr)):
-        if math.isnan(cloud_arr[ind][0]) is False and len(cloud_arr_filterd) < limit_size:
-            cloud_arr_filterd = np.vstack((cloud_arr_filterd, np.array((cloud_arr[ind][0], cloud_arr[ind][1], cloud_arr[ind][2], cloud_arr[ind][3]), dtype=np.float32)))
-
+    # Delte the first row.
     # cloud_arr_filterd = np.delete(cloud_arr_filterd, 0, 0)
 
     modified_msg = msg
@@ -124,7 +137,8 @@ def point_cloud_callback(msg):
     modified_msg.row_step = modified_msg.point_step * modified_msg.width
     modified_msg.data = cloud_arr_filterd.tostring()
     modified_msg.is_dense = False
-    pub_.publish(modified_msg)
+    return modified_msg
+    # pub_.publish(modified_msg)
 
 def camera_info_callback(msg):
     global camera_model_, camera_info_
@@ -150,8 +164,28 @@ if __name__ == '__main__':
     rospy.init_node('depth2scan', anonymous=True)
     # rospy.Subscriber("horizontal_laser_3d", PointCloud2, horizontal_laser_scan_callback)
     # rospy.Subscriber("vertical_laser_3d", PointCloud2, vertical_laser_scan_callback)
-    rospy.Subscriber("/zed/zed_node/point_cloud/cloud_registered", PointCloud2, point_cloud_callback)
+    # rospy.Subscriber("/zed2/zed_node/point_cloud/cloud_registered", PointCloud2, point_cloud_callback)
     # rospy.Subscriber("/zed/zed_node/depth/depth_registered", Image, depth_image_callback())
     # rospy.Subscriber("/zed/zed_node/depth/camera_info", CameraInfo, camera_info_callback())
 
-    rospy.spin()
+    # rospy.spin()
+    path = '/home/hcchou/Project/dataset/SLAM/AIRS/zed2/2020-10-28-09-39-53'
+    file_input = '/2020-10-28-09-39-53_no_tf.bag'
+    file_output = '/2020-10-28-09-39-53_no_tf_modified.bag'
+    dir_input = path + file_input
+    dir_output = path + file_output
+
+    topic_point_cloud = '/zed/zed_node/point_cloud/cloud_registered'
+    topic_point_cloud_modified = '/zed/zed_node/point_cloud/cloud_registered_modified'
+
+    with rosbag.Bag(dir_output, 'a') as outbag:
+        for topic, msg, t in rosbag.Bag(dir_input).read_messages():
+            if topic == topic_point_cloud:
+                msg_modified = point_cloud_callback(msg)
+                outbag.write(topic_point_cloud_modified, msg_modified, msg_modified.header.stamp)
+                print ("Write new message, stamp: ", msg.header.stamp)
+            # if topic == '/tf' or topic == '/tf_static':
+            #     outbag.write(topic, msg, msg.transforms[0].header.stamp)
+            # else:
+            #     outbag.write(topic, msg, msg.header.stamp)
+        outbag.close()
